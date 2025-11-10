@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Dai'gor - The Cradle Continent</title>
     <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             background: #1a1510;
             font-family: 'Cinzel', 'Georgia', serif;
             color: #3a2a1a;
@@ -15,6 +20,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            overflow-x: hidden;
         }
         
         .container {
@@ -30,12 +36,30 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
         
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+                margin-bottom: 5px;
+            }
+        }
+        
         .subtitle {
             text-align: center;
             color: #b8965f;
             font-style: italic;
             margin-bottom: 30px;
             font-size: 1.2em;
+        }
+        
+        @media (max-width: 768px) {
+            .subtitle {
+                font-size: 1em;
+                margin-bottom: 15px;
+            }
         }
         
         .map-container {
@@ -60,9 +84,13 @@
             border: none;
             pointer-events: auto;
             border-radius: 40% 60% 50% 70% / 60% 40% 60% 50%;
+            /* Increase touch target size on mobile */
+            min-width: 44px;
+            min-height: 44px;
         }
         
-        .hover-zone:hover {
+        .hover-zone:hover,
+        .hover-zone.active {
             background: radial-gradient(
                 ellipse at center,
                 rgba(240, 220, 170, 0.55) 0%,
@@ -94,7 +122,48 @@
         }
         
         .tooltip.visible {
+            pointer-events: auto;
+        }
+        
+        @media (max-width: 768px) {
+            .tooltip {
+                position: fixed !important;
+                left: 50% !important;
+                top: 50% !important;
+                transform: translate(-50%, -50%) !important;
+                max-width: 90vw;
+                max-height: 80vh;
+                overflow-y: auto;
+                font-size: 13px;
+                padding: 12px 15px 40px 15px;
+            }
+        }
+        
+        .tooltip.visible {
             opacity: 1;
+        }
+        
+        .tooltip-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #d4af37;
+            color: #1a1510;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+        
+        .tooltip-close:active {
+            background: #b8965f;
         }
         
         .tooltip h3 {
@@ -114,16 +183,35 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         
+        @media (max-width: 768px) {
+            .legend {
+                padding: 15px;
+                margin-top: 10px;
+            }
+        }
+        
         .legend h3 {
             margin-top: 0;
             color: #5a4a3a;
             font-size: 1.3em;
         }
         
+        @media (max-width: 768px) {
+            .legend h3 {
+                font-size: 1.1em;
+            }
+        }
+        
         .legend p {
             font-style: italic;
             color: #6a5a4a;
             margin: 10px 0 0 0;
+        }
+        
+        @media (max-width: 768px) {
+            .legend p {
+                font-size: 0.9em;
+            }
         }
     </style>
 </head>
@@ -215,14 +303,15 @@
                  style="left: 87%; top: 70%; width: 6%; height: 8%;"></div>
             
             <div id="tooltip" class="tooltip">
+                <button class="tooltip-close" onclick="closeTooltip()">×</button>
                 <h3 id="tooltip-title"></h3>
                 <div id="tooltip-content"></div>
             </div>
         </div>
         
         <div class="legend">
-            <h3>🗺️ Hover over regions to explore Dai'gor</h3>
-            <p>Click and drag to explore the map • Hover over any region for detailed information</p>
+            <h3>🗺️ Explore Dai'gor</h3>
+            <p id="legend-text">Hover over regions for detailed information • Tap on mobile</p>
         </div>
     </div>
     
@@ -310,39 +399,81 @@
         const tooltipTitle = document.getElementById('tooltip-title');
         const tooltipContent = document.getElementById('tooltip-content');
         
+        // Close tooltip function
+        function closeTooltip() {
+            tooltip.classList.remove('visible');
+            document.querySelectorAll('.hover-zone').forEach(z => z.classList.remove('active'));
+        }
+        
+        // Detect if device is mobile/touch
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
         document.querySelectorAll('.hover-zone').forEach(zone => {
             const regionId = zone.getAttribute('data-region');
             
-            zone.addEventListener('mouseenter', (e) => {
+            // Touch/Click events for mobile
+            zone.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const region = regions[regionId];
                 if (region) {
+                    // Close any other active zones
+                    document.querySelectorAll('.hover-zone').forEach(z => z.classList.remove('active'));
+                    
+                    // Show tooltip for this zone
+                    zone.classList.add('active');
                     tooltipTitle.textContent = region.title;
                     tooltipContent.textContent = region.content;
                     tooltip.classList.add('visible');
                 }
             });
             
-            zone.addEventListener('mousemove', (e) => {
-                const container = document.querySelector('.map-container');
-                const rect = container.getBoundingClientRect();
-                let x = e.clientX - rect.left + 20;
-                let y = e.clientY - rect.top + 20;
+            // Desktop hover events (only if not touch device)
+            if (!isTouchDevice) {
+                zone.addEventListener('mouseenter', (e) => {
+                    const region = regions[regionId];
+                    if (region) {
+                        tooltipTitle.textContent = region.title;
+                        tooltipContent.textContent = region.content;
+                        tooltip.classList.add('visible');
+                        zone.classList.add('active');
+                    }
+                });
                 
-                // Keep tooltip within container bounds
-                if (x + 440 > rect.width) {
-                    x = e.clientX - rect.left - 440;
-                }
-                if (y + tooltip.offsetHeight > rect.height) {
-                    y = e.clientY - rect.top - tooltip.offsetHeight - 20;
-                }
+                zone.addEventListener('mousemove', (e) => {
+                    const container = document.querySelector('.map-container');
+                    const rect = container.getBoundingClientRect();
+                    let x = e.clientX - rect.left + 20;
+                    let y = e.clientY - rect.top + 20;
+                    
+                    // Keep tooltip within container bounds
+                    if (x + 440 > rect.width) {
+                        x = e.clientX - rect.left - 440;
+                    }
+                    if (y + tooltip.offsetHeight > rect.height) {
+                        y = e.clientY - rect.top - tooltip.offsetHeight - 20;
+                    }
+                    
+                    tooltip.style.left = x + 'px';
+                    tooltip.style.top = y + 'px';
+                });
                 
-                tooltip.style.left = x + 'px';
-                tooltip.style.top = y + 'px';
-            });
-            
-            zone.addEventListener('mouseleave', () => {
-                tooltip.classList.remove('visible');
-            });
+                zone.addEventListener('mouseleave', () => {
+                    tooltip.classList.remove('visible');
+                    zone.classList.remove('active');
+                });
+            }
+        });
+        
+        // Close tooltip when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.hover-zone') && !e.target.closest('.tooltip')) {
+                closeTooltip();
+            }
+        });
+        
+        // Prevent tooltip from closing when clicking inside it
+        tooltip.addEventListener('click', (e) => {
+            e.stopPropagation();
         });
     </script>
 </body>
